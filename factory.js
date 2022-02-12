@@ -2,6 +2,12 @@
 import { Database as SqliteDatabase } from "https://deno.land/x/sqlite3@0.3.1/mod.ts";
 
 class IndexedDBRequest {
+  get result() {}
+  get error() {}
+  get source() {}
+  get transaction() {}
+  get readyState() {}
+
   constructor() {
     
   }
@@ -57,7 +63,23 @@ class IndexedDBTransaction {
     cb(this.#db);
   }
 }
-  
+
+class IDBIndex {
+  get name() {}
+  get objectStore() {}
+  get keyPath() {}
+  get multiEntry() {}
+  get unique() {}
+
+  get(query) {}
+  getKey(query) {}
+  getAll(query) {}
+  getAllKeys(query) {}
+  count(query) {}
+  openCursor(query, direction = "next") {}
+  openKeyCursor(query, direction = "next") {}
+}
+
 class IndexedDBStore {
   #name; // : string;
   #tx; // : IndexedDBTransaction;
