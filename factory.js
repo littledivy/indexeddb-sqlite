@@ -1,15 +1,41 @@
 // Maybe use divy's async_sqlite?
 import { Database as SqliteDatabase } from "https://deno.land/x/sqlite3@0.3.1/mod.ts";
 
-class IndexedDBRequest {
-  get result() {}
-  get error() {}
-  get source() {}
-  get transaction() {}
-  get readyState() {}
+const _source = Symbol("[[IDBRequest.source]]");
+const _tx = Symbol("[[IDBRequest.transaction]]");
+const _result = Symbol("[[IDBRequest.result]]");
+const _readyState = Symbol("[[IDBRequest.readyState]]");
+const _error = Symbol("[[IDBRequest.error]]");
 
-  constructor() {
-    
+class IDBRequest extends EventTarget {
+  [_source];
+  [_tx];
+  [_result];
+  [_readyState] = "pending";
+  [_error];
+
+  get result() {
+    return this[_result];
+  }
+
+  get error() {
+    return this[_error];
+  }
+
+  get source() {
+    return this[_source];
+  }
+
+  get transaction() {
+    return this[_tx];
+  }
+
+  get readyState() {
+    return this[_readyState];
+  }
+
+  toString() {
+    return "[object IDBRequest]";
   }
 }
 
@@ -38,7 +64,7 @@ class IndexedDBTransaction {
     this.#mode = mode;
     this.#db = db;
   }
-  
+
   get objectStoreNames() {
     return this.#stores;
   }
@@ -54,7 +80,7 @@ class IndexedDBTransaction {
     }
     return maybeStore;
   }
-  
+
   commit() {}
   abort() {}
 
@@ -88,8 +114,8 @@ class IndexedDBStore {
     this.#name = name;
     this.#tx = tx;
   }
-  
-  get name() { 
+
+  get name() {
     return this.#name;
   }
 
@@ -106,12 +132,12 @@ class IndexedDBStore {
   clear() {}
 
   get(key) {
-    this.#tx[_queue](db => {
+    this.#tx[_queue]((db) => {
       // FIXME!
       db.execute(`
         SELECT value FROM ${this.#name} WHERE LIMIT = 1;
       `);
-    })
+    });
   }
 
   getKey(query) {}
@@ -131,14 +157,14 @@ class IndexedDBDatabase {
   constructor(backend) {
     this.#backend = backend;
   }
-  
+
   get name() {}
   get version() {}
 
   createObjectStore(name, options) {
     const store = new IndexedDBStore(name);
     this.#objectStores[name] = store;
-    
+
     // FIXME!
     this.#backend.execute(`
       CREATE TABLE ${name} (
@@ -152,7 +178,7 @@ class IndexedDBDatabase {
 
   deleteObjectStore(name) {
     delete this.#objectStores[name];
-    
+
     // FIXME!
     this.#backend.execute(`
       DROP TABLE ${name}
@@ -162,7 +188,9 @@ class IndexedDBDatabase {
 
   transaction(storeNames, mode = "readonly", options) {
     for (var i = 0; i < storeNames.length; i++) {
-      if (!Object.keys(this.#objectStore).contains(storeNames[i])) throw new TypeError("Not found");
+      if (!Object.keys(this.#objectStore).contains(storeNames[i])) {
+        throw new TypeError("Not found");
+      }
     }
 
     return new IndexedDBTransaction(this, storeNames, mode);
@@ -173,18 +201,77 @@ class IndexedDBDatabase {
   }
 }
 
-class Factory {
+class IDBOpenDBRequest extends IDBRequest {
+  onupgradeneeded;
+  onblocked;
+
+  toString() {
+    return "[object IDBOpenDBRequest]";
+  }
+}
+
+class IDBFactory {
+  // https://w3c.github.io/IndexedDB/#dom-idbfactory-open
   // name: string, version?: number
   open(name, version) {
+    if (version == 0) throw new TypeError("Version cannot be 0.");
+
+    // https://w3c.github.io/IndexedDB/#request-open-request
+    const request = Object.create(IDBOpenDBRequest);
+    // source of an open request is always null.
+    request[_source] = null;
+    backend.openDatabase(name, version, request).then((result) => {
+      request[_result] = result;
+      request[_readyState] = "done";
+      // dispatchEvent
+    }).catch((err) => {
+      request[_result] = undefined;
+      request[_readyState] = "done";
+      request[_error] = err;
+      // dispatchEvent
+    });
+
+    return request;
+  }
+
+  // https://w3c.github.io/IndexedDB/#dom-idbfactory-deletedatabase
+  deleteDatabase(name) {
+    // https://w3c.github.io/IndexedDB/#request-open-request
+    const request = Object.create(IDBOpenDBRequest);
+    // source of an open request is always null.
+    request[_source] = null;
+    backend.deleteDatabase(name, request).then((result) => {
+      request[_result] = result;
+      request[_readyState] = "done";
+      // dispatchEvent
+    }).catch((err) => {
+      request[_result] = undefined;
+      request[_readyState] = "done";
+      request[_error] = err;
+      // dispatchEvent
+    });
+
+    return request;
+  }
+
+  async databases() {}
+
+  cmp(first, second) {}
+
+  toString() {
+    return "[object IDBFactory]";
+  }
+}
+
+const backend = {
+  async openDatabase(name, version, request) {
     const database = new SqliteDatabase(name);
     // TODO: Skipped a lot of stuff
     // Make a schema table?
     return new IndexedDBDatabase(database);
-  }
+  },
+  async deleteDatabase(name, request) {
+  },
+};
 
-  deleteDatabase(name) {}
-  async databases() {}
-  cmp(first, second) {}
-}
-
-window.indexedDB = new Factory();
+window.indexedDB = new IDBFactory();
