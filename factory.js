@@ -111,9 +111,9 @@ class IDBIndex {
   openKeyCursor(query, direction = "next") {}
 }
 
-class IndexedDBStore {
+class IDBStore {
   #name; // : string;
-  #tx; // : IndexedDBTransaction;
+  #tx; // : IDBTransaction;
 
   constructor(name, tx) {
     this.#name = name;
@@ -176,11 +176,36 @@ class IDBDatabase extends EventTarget {
   get name() {}
   get version() {}
 
+  // https://w3c.github.io/IndexedDB/#dom-idbdatabase-createobjectstore
   createObjectStore(name, options) {
-    const store = new IndexedDBStore(name);
+    // 4.
+    const keyPath = options.keyPath || null;
+    if (keyPath !== null) {
+      validateKeyPath(keyPath);
+    }
+    if (this.#objectStores[name] !== undefined) {
+      // TODO: ConstraintError
+      throw new TypeError("Object store already exists");
+    }
+    const autoIncrement = options.autoIncrement || false;
+    if (autoIncrement && (keyPath == "" || Array.isArray(keyPath))) {
+      // TODO: InvalidAccessError
+      throw new TypeError();
+    }
+
+    const store = Object.create(IDBStore);
+    store[_storeName] = name;
+    // TODO
+
     this.#objectStores[name] = store;
 
     // FIXME!
+    // Backends will be asyncronous so we need to store this
+    // promise in the returned IDBStore object. In case this fails
+    // the spec wants us to fire an event using "abort a transaction" steps.
+    //
+    // I've lost faith in the web "makers".
+    // Fuck SQL injection, btw.
     this.#backend.execute(`
       CREATE TABLE ${name} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -291,6 +316,38 @@ class IDBFactory {
   toString() {
     return "[object IDBFactory]";
   }
+}
+
+// https://tc39.es/ecma262/#prod-IdentifierName
+const regexIdentifierStart = /[$_\p{ID_Start}]/u;
+const regexIdentifierPart = /[$_\u200C\u200D\p{ID_Continue}]/u;
+const regexIdentifierName =
+  /^(?:[$_\p{ID_Start}])(?:[$_\u200C\u200D\p{ID_Continue}])*$/u;
+
+// https://w3c.github.io/IndexedDB/#key-path
+function validateKeyPath(keyPath) {
+  if (typeof keyPath == "string") {
+    if (keyPath === "") return;
+    if (regexIdentifierName.test(keyPath)) return;
+    // Seperated by U+002E FULL STOP.
+    if (keyPath.indexOf(".") >= 0) {
+      const paths = keyPath.split(".");
+      for (const path of paths) {
+        if (!regexIdentifierName.test(path)) {
+          throw new SyntaxError("Not a valid key path");
+        }
+      }
+      return;
+    }
+    throw new SyntaxError("Not a valid key path");
+  }
+  if (Array.isArray(keyPath) && keyPath.length > 0) {
+    for (const path of keyPath) {
+      validateKeyPath(path);
+    }
+    return;
+  }
+  throw new SyntaxError("Not a valid key path");
 }
 
 // https://w3c.github.io/IndexedDB/#compare-two-keys
