@@ -258,12 +258,85 @@ class IDBFactory {
 
   // https://w3c.github.io/IndexedDB/#dom-idbfactory-cmp
   cmp(first, second) {
-    let a = convertValueToKey(first);
-    let b = convertValueToKey(second);
+    // 1-2.
+    const a = convertValueToKey(first);
+    if (a === "invalid") throw new DOMException("Invalid value", "DataError");
+    // 3-4.
+    const b = convertValueToKey(second);
+    if (b === "invalid") throw new DOMException("Invalid value", "DataError");
+    // 5.
+    return compareKeys(a, b);
   }
 
   toString() {
     return "[object IDBFactory]";
+  }
+}
+
+// https://w3c.github.io/IndexedDB/#compare-two-keys
+function compareKeys(a, b) {
+  // 1-2.
+  const ta = a.type;
+  const tb = b.type;
+  // 3.
+  if (ta !== tb) {
+    if (ta === "array") return 1;
+    if (tb === "array") return -1;
+
+    if (ta === "binary") return 1;
+    if (tb === "binary") return -1;
+
+    if (ta === "string") return 1;
+    if (tb === "string") return -1;
+
+    if (ta === "date") return 1;
+    if (tb !== "date") {
+      throw new TypeError("unreachable");
+    }
+
+    return -1;
+  }
+  // 4-5.
+  const va = a.value;
+  const vb = b.value;
+  // 6.
+  switch (ta) {
+    case "number":
+    case "date": {
+      if (va > vb) return 1;
+      if (vb > va) return -1;
+      return 0;
+    }
+    case "string": {
+      // a code unit less b is just the same as a < b
+      if (va < vb) return -1;
+      if (vb < va) return 1;
+      return 0;
+    }
+    case "binary": {
+      // TODO
+    }
+    case "array": {
+      const length = Math.min(va.length, vb.length);
+      let i = 0;
+      while (i < length) {
+        const result = cmp(va[i], vb[i]);
+        if (result !== 0) {
+          return result;
+        }
+        i++;
+      }
+      if (va.length > vb.length) {
+        return 1;
+      }
+      if (va.length < vb.length) {
+        return -1;
+      }
+      return 0;
+    }
+    // TODO(@littledivy): This should be in the spec as an `ASSERT:`?
+    default:
+      throw new TypeError("unreachable");
   }
 }
 
@@ -273,7 +346,6 @@ function convertValueToKey(input, seen) {
   if (seen === undefined) seen = new Set();
   // 2.
   if (seen.has(input)) {
-    // What the fuck does `invalid` mean?
     return "invalid";
   }
 
