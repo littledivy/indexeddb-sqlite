@@ -7,12 +7,17 @@ const _result = Symbol("[[IDBRequest.result]]");
 const _readyState = Symbol("[[IDBRequest.readyState]]");
 const _error = Symbol("[[IDBRequest.error]]");
 
+// Record<string, IDBRequest>;
+const connectionQueue = {};
+
 class IDBRequest extends EventTarget {
   [_source];
   [_tx];
   [_result];
   [_readyState] = "pending";
   [_error];
+  onsuccess;
+  onerror;
 
   get result() {
     return this[_result];
@@ -151,11 +156,21 @@ class IndexedDBStore {
   count(query) {}
 }
 
-class IndexedDBDatabase {
+class IDBDatabase extends EventTarget {
   #backend; // : SqliteDatabase;
   #objectStores = {}; // : Record<string, IndexDBStore>[];
+  onabort;
+  onclose;
+  onerror;
+  onversionchange;
+
   constructor(backend) {
     this.#backend = backend;
+  }
+
+  // https://w3c.github.io/IndexedDB/#dom-idbdatabase-objectstorenames
+  get objectStoreNames() {
+    return Object.keys(this.#objectStores).sort();
   }
 
   get name() {}
@@ -221,7 +236,7 @@ class IDBFactory {
     const request = Object.create(IDBOpenDBRequest);
     // source of an open request is always null.
     request[_source] = null;
-    backend.openDatabase(name, version, request).then((result) => {
+    openDatabase(name, version, request).then((result) => {
       request[_result] = result;
       request[_readyState] = "done";
       // dispatchEvent
@@ -410,12 +425,26 @@ function convertValueToKey(input, seen) {
   return "invalid";
 }
 
+async function openDatabase(name, version, request) {
+  // TODO(@littledivy): Skipped a lot of stuff
+  // Make and use a schema table.
+
+  if (connectionQueue[name]) {
+    connectionQueue[name] = [];
+  }
+
+  const queue = connectionQueue[name];
+  queue.push(request);
+
+  await Promise.all(queue);
+  // TODO(@littledivy): versioning
+  return new IDBDatabase(backend.openDatabase(name));
+}
+
 const backend = {
-  async openDatabase(name, version, request) {
+  async openDatabase(name) {
     const database = new SqliteDatabase(name);
-    // TODO: Skipped a lot of stuff
-    // Make a schema table?
-    return new IndexedDBDatabase(database);
+    return database;
   },
   async deleteDatabase(name, request) {},
   async listDatabases() {},
