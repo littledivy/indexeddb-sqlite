@@ -210,6 +210,7 @@ class IDBOpenDBRequest extends IDBRequest {
   }
 }
 
+// https://w3c.github.io/IndexedDB/#factory-interface
 class IDBFactory {
   // https://w3c.github.io/IndexedDB/#dom-idbfactory-open
   // name: string, version?: number
@@ -254,7 +255,11 @@ class IDBFactory {
     return request;
   }
 
-  async databases() {}
+  // https://w3c.github.io/IndexedDB/#dom-idbfactory-databases
+  async databases() {
+    // { name: string; version: number }[]
+    return backend.listDatabases();
+  }
 
   // https://w3c.github.io/IndexedDB/#dom-idbfactory-cmp
   cmp(first, second) {
@@ -412,8 +417,8 @@ const backend = {
     // Make a schema table?
     return new IndexedDBDatabase(database);
   },
-  async deleteDatabase(name, request) {
-  },
+  async deleteDatabase(name, request) {},
+  async listDatabases() {},
 };
 
 window.indexedDB = new IDBFactory();
