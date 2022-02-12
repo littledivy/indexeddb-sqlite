@@ -256,11 +256,81 @@ class IDBFactory {
 
   async databases() {}
 
-  cmp(first, second) {}
+  // https://w3c.github.io/IndexedDB/#dom-idbfactory-cmp
+  cmp(first, second) {
+    let a = convertValueToKey(first);
+    let b = convertValueToKey(second);
+  }
 
   toString() {
     return "[object IDBFactory]";
   }
+}
+
+// https://w3c.github.io/IndexedDB/#convert-a-value-to-a-key
+function convertValueToKey(input, seen) {
+  // 1.
+  if (seen === undefined) seen = new Set();
+  // 2.
+  if (seen.has(input)) {
+    // What the fuck does `invalid` mean?
+    return "invalid";
+  }
+
+  // 3.1
+  if (typeof input === "number") {
+    if (isNaN(input)) {
+      throw new DOMException("input is NaN", "DataError");
+    }
+    return { type: "number", value: input };
+  }
+  // 3.2
+  if (input instanceof Date) {
+    const ms = input.valueOf();
+    if (isNaN(ms)) {
+      throw new DataError();
+    }
+    return { type: "date", value: input };
+  }
+  // 3.3
+  if (typeof input === "string") {
+    return { type: "string", value: input };
+  }
+  // 3.4
+  if (
+    input instanceof ArrayBuffer ||
+    ArrayBuffer.isView(input)
+  ) {
+    // TODO(@littledivy): Copy bytes
+    return { type: "binary", value: input };
+  }
+  // 3.5
+  if (Array.isArray(input)) {
+    // 3.5.1
+    const len = input.length;
+    seen.add(input);
+    const keys = [];
+    let index = 0;
+    // 3.5.5
+    while (index < len) {
+      // 3.5.5.1
+      const hop = input.hasOwnProperty(index);
+      if (hop === false) {
+        return "invalid";
+      }
+
+      const entry = input[i];
+      const key = convertValueToKey(entry, seen);
+      if (key === "invalid") return "invalid";
+      keys.push(key);
+      // 3.5.5.7
+      index += 1;
+    }
+    // 3.5.6
+    return keys;
+  }
+  // 3.6
+  return "invalid";
 }
 
 const backend = {
