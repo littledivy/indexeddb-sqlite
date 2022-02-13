@@ -111,23 +111,26 @@ class IDBIndex {
   openKeyCursor(query, direction = "next") {}
 }
 
+const _storeTx = Symbol("[[IDBStore.transaction]]");
+const _storeName = Symbol("[[IDBStore.name]]");
+
 class IDBStore {
-  #name; // : string;
-  #tx; // : IDBTransaction;
+  [_storeName]; // : string;
+  [_storeTx]; // : IDBTransaction;
 
   constructor(name, tx) {
-    this.#name = name;
-    this.#tx = tx;
+    this[_storeName] = name;
+    this[_storeTx] = tx;
   }
 
   get name() {
-    return this.#name;
+    return this[_storeName];
   }
 
   get keyPath() {}
   get indexNames() {}
   get transaction() {
-    return this.#tx;
+    return this[_storeTx];
   }
   get autoIncrement() {}
 
@@ -137,7 +140,7 @@ class IDBStore {
   clear() {}
 
   get(key) {
-    this.#tx[_queue]((db) => {
+    this[_storeTx][_queue]((db) => {
       // FIXME!
       db.execute(`
         SELECT value FROM ${this.#name} WHERE LIMIT = 1;
@@ -196,16 +199,12 @@ class IDBDatabase extends EventTarget {
     const store = Object.create(IDBStore);
     store[_storeName] = name;
     // TODO
-
+    // store[_storeTx] = transaction;
     this.#objectStores[name] = store;
-
     // FIXME!
     // Backends will be asyncronous so we need to store this
     // promise in the returned IDBStore object. In case this fails
     // the spec wants us to fire an event using "abort a transaction" steps.
-    //
-    // I've lost faith in the web "makers".
-    // Fuck SQL injection, btw.
     this.#backend.execute(`
       CREATE TABLE ${name} (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,6 +213,7 @@ class IDBDatabase extends EventTarget {
       );
     `);
     // TODO: Insert store into the schema table
+    return store;
   }
 
   deleteObjectStore(name) {
@@ -319,8 +319,6 @@ class IDBFactory {
 }
 
 // https://tc39.es/ecma262/#prod-IdentifierName
-const regexIdentifierStart = /[$_\p{ID_Start}]/u;
-const regexIdentifierPart = /[$_\u200C\u200D\p{ID_Continue}]/u;
 const regexIdentifierName =
   /^(?:[$_\p{ID_Start}])(?:[$_\u200C\u200D\p{ID_Continue}])*$/u;
 
